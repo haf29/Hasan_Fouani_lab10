@@ -1,0 +1,5 @@
+﻿flake8
+
+pytest
+coverage
+bandit
