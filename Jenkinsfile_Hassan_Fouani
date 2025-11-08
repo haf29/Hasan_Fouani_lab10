@@ -1,0 +1,40 @@
+pipeline {
+  agent any
+  environment { VENV = 'venv' }
+
+  stages {
+    stage('Setup') {
+      steps {
+        bat """
+        if not exist %VENV% python -m venv %VENV%
+        call %VENV%\\Scripts\\activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        """
+      }
+    }
+
+    stage('Lint') {
+      steps {
+        bat "call %VENV%\\Scripts\\activate && flake8 app.py"
+      }
+    }
+
+    stage('Test') {
+      steps {
+        bat "call %VENV%\\Scripts\\activate && pytest -q"
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        echo "Deploying..."
+      }
+    }
+  }
+
+  post {
+    always { cleanWs() }
+  }
+}
+
