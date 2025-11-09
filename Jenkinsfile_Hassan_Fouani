@@ -1,40 +1,91 @@
 pipeline {
   agent any
-  environment { VENV = 'venv' }
+
+  // If Jenkins still can't see Python, uncomment PY_HOME/PATH and set to your real folders.
+  environment {
+    VENV = 'venv'
+    // PY_HOME = 'C:\\Users\\<you>\\AppData\\Local\\Programs\\Python\\Python311'
+    // PATH = "C:\\Windows;${env.PY_HOME};${env.PY_HOME}\\Scripts;${env.PATH}"
+  }
 
   stages {
+
+    // Optional: keep this until things are green, then delete.
+    stage('Diagnostics') {
+      steps {
+        bat '''
+          echo === where py ===
+          where py
+          echo === py --version ===
+          py --version
+          echo === where python ===
+          where python
+        '''
+      }
+    }
+
     stage('Setup') {
       steps {
-        bat """
-        if not exist %VENV% py -3 -m venv %VENV%
-        call %VENV%\\Scripts\\activate
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
-        """
+        bat '''
+          if not exist "%VENV%" py -3 -m venv "%VENV%"
+          call "%VENV%\\Scripts\\activate"
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+        '''
       }
     }
 
     stage('Lint') {
       steps {
-        bat "call %VENV%\\Scripts\\activate && python -m flake8 app.py"
+        bat 'call "%VENV%\\Scripts\\activate" && flake8 app.py'
       }
     }
 
     stage('Test') {
       steps {
-        bat "call %VENV%\\Scripts\\activate && python -m pytest -q"
+        bat 'call "%VENV%\\Scripts\\activate" && pytest -q'
+      }
+    }
+
+    stage('Coverage') {
+      steps {
+        bat '''
+          call "%VENV%\\Scripts\\activate"
+          coverage run -m pytest -q
+          coverage report -m
+          coverage xml
+          coverage html
+        '''
+      }
+    }
+
+    stage('Security Scan') {
+      steps {
+        // --exit-zero keeps the build green while you're setting things up
+        bat 'call "%VENV%\\Scripts\\activate" && bandit -r . --exit-zero -f txt -o bandit.txt'
       }
     }
 
     stage('Deploy') {
+      when { branch 'main' }
       steps {
-        echo "Deploying..."
+        bat '''
+          call "%VENV%\\Scripts\\activate"
+          if not exist build mkdir build
+          python app.py > build\\output.txt
+          echo Deployed output to build\\output.txt
+        '''
       }
     }
   }
 
   post {
-    always { cleanWs() }
+    success {
+      archiveArtifacts artifacts: 'coverage.xml, bandit.txt, build/**, htmlcov/**', fingerprint: true
+      echo 'Artifacts archived.'
+    }
+    always {
+      cleanWs()
+    }
   }
 }
-
